@@ -146,9 +146,60 @@ class PPO:
             episode_masks,
             _,  # rnd_state_batch - not used anymore
         ) in generator:
-            # TODO ----- START -----
-            # Implement the PPO update step
-            # TODO ----- END -----
+            
+            # GOAT: https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+            
+            # Step 1. Get new log probs from the actor critic for the given actions to get ratio shizz
+            self.actor_critic.update_distribution(observations)
+
+            current_log_probs = self.actor_critic.get_actions_log_prob(sampled_actions).unsqueeze(-1)
+            log_ratio = current_log_probs - prev_log_probs
+            ratio = log_ratio.exp()
+
+            # Step 2. Calculate KL and clipping
+            # TODO: Unused till now
+            # Calculate approx_kl http://joschu.net/blog/kl-approx.html
+            with torch.no_grad():
+                approx_kl = ((ratio - 1) - log_ratio).mean()
+
+            # Step 3. Calculate clipped policy loss
+            l1 = -advantage_estimates * ratio
+            l2 = -advantage_estimates * torch.clamp(ratio, 1 - self.clip_param, 1 + self.clip_param)
+            loss_policy = torch.max(l1, l2).mean()
+
+            # if self.normalize_advantage_per_mini_batch:
+            #     advantage_estimates = (advantage_estimates - advantage_estimates.mean()) / (
+            #         advantage_estimates.std() + 1e-8
+            #     )
+
+            # Step 4: Value loss
+            current_values = self.actor_critic.evaluate(critic_observations)
+            if self.use_clipped_value_loss:
+                value_clipped = value_targets + torch.clamp(current_values - value_targets, -self.clip_param, self.clip_param)
+                loss_unclipped = (current_values - discounted_returns) ** 2
+                loss_clipped = (value_clipped - discounted_returns) ** 2
+                loss_value = 0.5 * torch.max(loss_unclipped, loss_clipped).mean()
+            else:
+                loss_value = 0.5 * ((current_values - discounted_returns) ** 2).mean()
+
+            # TODO: Check if this is correct thingy to use 
+            entropy = self.actor_critic.entropy.mean()
+
+            # Step 5: Total loss
+            loss = loss_policy + self.value_loss_coef * loss_value - self.entropy_coef * entropy
+
+            # Step 5. Optimizer step
+            self.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            self.optimizer.step()
+
+            mean_surrogate_loss += loss_policy
+            mean_value_loss += loss_value
+
+            if approx_kl > self.desired_kl:
+                # TODO: Break or Continue??
+                break
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates

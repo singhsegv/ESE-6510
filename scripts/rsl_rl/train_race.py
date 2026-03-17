@@ -71,6 +71,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 
+sys.path.append("/home/singhsegv/penn-coursework/ese6510-final/ese651_project")
 # Import extensions to set up environment tasks
 import src.isaac_quad_sim2real.tasks   # noqa: F401
 

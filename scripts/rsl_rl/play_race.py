@@ -66,6 +66,8 @@ from isaaclab_rl.rsl_rl import (
     export_policy_as_onnx,
 )
 
+sys.path.append("/home/singhsegv/penn-coursework/ese6510-final/ese651_project")
+
 # Import extensions to set up environment tasks
 import src.isaac_quad_sim2real.tasks   # noqa: F401
 
